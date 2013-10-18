@@ -1,0 +1,10 @@
+#subject,
+#result {
+  display: block;
+  width: 72em;
+  height: 18em;
+}
+
+.error {
+  color: red;
+}

@@ -1,0 +1,29 @@
+<body>
+  {{> form}}
+</body>
+
+<template name='form'>
+  {{> examples }}
+  <label for=subject>Code:</label>
+  <textarea id=subject autofocus></textarea>
+
+  <button id=run type=button>Run</button>
+  <input id=reset type=checkbox checked><label for=reset>Reset runtime before run</label>
+
+  <h1 for=subject>Result:</h1>
+  <div id=result>
+  </div>
+</template>
+
+<template name='examples'>
+<select id=examples>
+  <option value='**' disabled>Code Examples</option>
+  {{#each examples}}
+  {{> example }}
+  {{/each}}
+</select>
+</template>
+
+<template name='example'>
+<option value="{{code}}">{{title}}</option>
+</template>
