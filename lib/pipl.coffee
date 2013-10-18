@@ -5,11 +5,7 @@ PIPL = {}
     @main = new PIPL.ParallelProcess(@engine)
 
   # Public: Generate unique id for use as channel_id or name_id.
-  __id: 0
-  new_id: ->
-    "#<ID:xxx#{(@__id++).toString(16)}xxx>".replace(/x/g, (c) ->
-      (Math.random()*16|0).toString(16)
-    )
+  new_id: -> @engine.new_id()
 
   # Public: Create a new sequence of processes starting with a read.
   read: (channel_id, name_id, replicate=false, new_names) ->
@@ -45,6 +41,12 @@ class PIPL.Engine
     @queue = []
     @readers = {}
     @senders = {}
+
+  __id: 0
+  new_id: ->
+    "#<ID:xxx#{(@__id++).toString(16)}xxx>".replace(/x/g, (c) ->
+      (Math.random()*16|0).toString(16)
+    )
 
   # Public: Handle new read request on channel from process.
   enqueue_reader: (channel, process, refs) ->
