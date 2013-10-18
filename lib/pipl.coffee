@@ -88,7 +88,10 @@ class PIPL.Engine
   # Public: Run to completion.
   run: ->
     @step()
-    setTimeout((=> @run()), 10) if @queue.length > 0
+    if @queue.length > 0
+      setTimeout((=> @run()), 10)
+    else
+      @clean()
 
   # Internal: Complete send/read on channel.
   step: ->
@@ -105,6 +108,13 @@ class PIPL.Engine
   # Internal: Remove process from queue for completing step.
   select = (queue) ->
     queue.splice( Math.floor(Math.random() * queue.length), 1 )[0]
+
+  # Public: Free memory used by unused IDs.
+  clean: ->
+    for queue in [@readers, @senders]
+      do -> Object.keys(queue).forEach (id) ->
+        if queue[id].length < 1
+          delete queue[id]
 
   # Internal: Add new_names to refs.
   make_new_names: (refs, new_names) ->
