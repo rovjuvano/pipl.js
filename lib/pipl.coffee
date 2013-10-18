@@ -124,6 +124,7 @@ class PIPL.Engine
 # Internal: Abstract parent class for Read and Send processes.
 class PIPL.SimpleProcess
   constructor: (@engine, @channel_id, @name_id, @replicate, @new_names) ->
+    @no_name = (@name_id == '')
 
   # Public: Append read process.
   read: (channel_id, name_id, replicate=false, new_names) ->
@@ -147,7 +148,7 @@ class PIPL.ReadProcess extends PIPL.SimpleProcess
 
   input: (refs, value) ->
     @engine.make_new_names(refs, @new_names)
-    console.log("read: #{@channel_id}=#{refs.get(@channel_id)}[#{@name_id} = #{value}]")
+    console.log("read: #{@channel_id}=#{refs.get(@channel_id)}[#{@name_id} = #{value}]#{if @no_name then ' (ignored)' else ''}")
     if @next
       refs = refs.dup() if @replicate
       refs.set(@name_id, value) unless @no_name
@@ -165,7 +166,7 @@ class PIPL.SendProcess extends PIPL.SimpleProcess
       refs = refs.dup() if @replicate
       @next.proceed(refs)
     @proceed(refs) if @replicate
-    refs.get(@name_id)
+    if @no_name then @engine.new_id() else refs.get(@name_id)
 
 # Internal: Abstract parent class for Parallel and Choice processes.
 class PIPL.ComplexProcess
