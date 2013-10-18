@@ -33,7 +33,9 @@ class PIPL.Refs
     @store[key] = value
 
   dup: ->
-    $.extend(true, {}, this)
+    dup = new PIPL.Refs()
+    $.extend(dup.store, @store)
+    dup
 
 # Internal: Core execution logic.
 class PIPL.Engine
@@ -183,6 +185,7 @@ class PIPL.ParallelProcess extends PIPL.ComplexProcess
     @engine.make_new_names(refs, @new_names)
     if @processes.length > 0
       @processes[0].proceed(refs)
+    if @processes.length > 1
       @processes[i].proceed(refs.dup()) for i in [1..(@processes.length-1)]
 
 class PIPL.ChoiceProcess extends PIPL.ComplexProcess
@@ -201,6 +204,7 @@ class PIPL.ChoiceProcess extends PIPL.ComplexProcess
 
 class PIPL.ChoiceReadProcess extends PIPL.ReadProcess
   constructor: (@engine, @parent, @channel_id, @name_id, @replicate, @new_names) ->
+    @replicate = false
 
   kill: (refs) ->
     @engine.dequeue_reader(refs.get(@channel_id), this)
@@ -211,6 +215,7 @@ class PIPL.ChoiceReadProcess extends PIPL.ReadProcess
 
 class PIPL.ChoiceSendProcess extends PIPL.SendProcess
   constructor: (@engine, @parent, @channel_id, @name_id, @replicate, @new_names) ->
+    @replicate = false
 
   kill: (refs) ->
     @engine.dequeue_sender(refs.get(@channel_id), this)
