@@ -12,12 +12,12 @@ PIPL = {}
     )
 
   # Public: Create a new sequence of processes starting with a read.
-  read: (channel_id, name_id, replicate=false) ->
-    @main.read(channel_id, name_id, replicate)
+  read: (channel_id, name_id, replicate=false, new_names) ->
+    @main.read(channel_id, name_id, replicate, new_names)
 
   # Public: Create a new sequence of processes starting with a send.
-  send: (channel_id, name_id, replicate=false) ->
-    @main.send(channel_id, name_id, replicate)
+  send: (channel_id, name_id, replicate=false, new_names) ->
+    @main.send(channel_id, name_id, replicate, new_names)
 
   # Public: Run to completion.
   run: ->
@@ -47,17 +47,17 @@ class PIPL.Engine
     @senders = {}
 
   # Public: Handle new read request on channel from process.
-  enqueue_reader: (channel, process) ->
-    @enqueue(@readers, channel, process)
+  enqueue_reader: (channel, process, refs) ->
+    @enqueue(@readers, channel, process, refs)
 
   # Public: Handle new send request on channel from process.
-  enqueue_sender: (channel, process) ->
-    @enqueue(@senders, channel, process)
+  enqueue_sender: (channel, process, refs) ->
+    @enqueue(@senders, channel, process, refs)
 
   # Internal: enqueue helper
-  enqueue: (queue, channel, process) ->
+  enqueue: (queue, channel, process, refs) ->
     queue[channel] ||= []
-    queue[channel].push(process)
+    queue[channel].push([process, refs])
     @enqueue_step(channel)
 
   # Internal: Enqueue step if necessary.
@@ -90,118 +90,129 @@ class PIPL.Engine
   step: ->
     return unless @queue.length > 0
     channel = select(@queue)
-    reader = select(@readers[channel])
-    sender = select(@senders[channel])
-    reader.read( sender.send() ) if reader && sender
+
+    return unless @readers[channel].length > 0
+    return unless @senders[channel].length > 0
+    [reader, reader_refs] = select(@readers[channel])
+    [sender, sender_refs] = select(@senders[channel])
+
+    reader.input( reader_refs, sender.output(sender_refs) )
 
   # Internal: Remove process from queue for completing step.
   select = (queue) ->
     queue.splice( Math.floor(Math.random() * queue.length), 1 )[0]
 
+  # Internal: Add new_names to refs.
+  make_new_names: (refs, new_names) ->
+    return unless new_names
+    refs.set(name, @new_id()) for name in new_names
+
 # Internal: Abstract parent class for Read and Send processes.
 class PIPL.SimpleProcess
-  constructor: (@engine, @channel_id, @name_id, @replicate) ->
+  constructor: (@engine, @channel_id, @name_id, @replicate, @new_names) ->
 
   # Public: Append read process.
-  read: (channel_id, name_id, replicate=false) ->
-    @next = new PIPL.ReadProcess(@engine, channel_id, name_id, replicate)
+  read: (channel_id, name_id, replicate=false, new_names) ->
+    @next = new PIPL.ReadProcess(@engine, channel_id, name_id, replicate, new_names)
 
   # Public: Append send process.
-  send: (channel_id, name_id, replicate=false) ->
-    @next = new PIPL.SendProcess(@engine, channel_id, name_id, replicate)
+  send: (channel_id, name_id, replicate=false, new_names) ->
+    @next = new PIPL.SendProcess(@engine, channel_id, name_id, replicate, new_names)
 
   # Public: Append parallel process.
-  parallel: ->
-    @next = new PIPL.ParallelProcess(@engine)
+  parallel: (new_names) ->
+    @next = new PIPL.ParallelProcess(@engine, new_names)
 
   # Public: Append choice process.
-  chice: ->
-    @next = new PIPL.ChoiceProcess(@engine)
+  choice: (new_names) ->
+    @next = new PIPL.ChoiceProcess(@engine, new_names)
 
 class PIPL.ReadProcess extends PIPL.SimpleProcess
   proceed: (refs) ->
-    @refs = refs
-    @engine.enqueue_reader( @refs.get(@channel_id), this )
+    @engine.enqueue_reader( refs.get(@channel_id), this, refs )
 
-  read: (value) ->
-    console.log("read: #{@channel_id}=#{@refs.get(@channel_id)}(#{@name_id} = #{value})")
+  input: (refs, value) ->
+    @engine.make_new_names(refs, @new_names)
+    console.log("read: #{@channel_id}=#{refs.get(@channel_id)}[#{@name_id} = #{value}]")
     if @next
-      refs = if @replicate then @refs.dup() else @refs
-      refs.set(@name_id, value)
+      refs = refs.dup() if @replicate
+      refs.set(@name_id, value) unless @no_name
       @next.proceed(refs)
-    @proceed(@refs) if @replicate
+    @proceed(refs) if @replicate
 
 class PIPL.SendProcess extends PIPL.SimpleProcess
   proceed: (refs) ->
-    @refs = refs
-    @engine.enqueue_sender( @refs.get(@channel_id), this )
+    @engine.enqueue_sender( refs.get(@channel_id), this, refs )
 
-  send: ->
-    console.log("send: #{@channel_id}=#{@refs.get(@channel_id)}(#{@name_id}=#{@refs.get(@name_id)})")
+  output: (refs) ->
+    @engine.make_new_names(refs, @new_names)
+    console.log("send: #{@channel_id}=#{refs.get(@channel_id)}(#{@name_id}=#{refs.get(@name_id)})")
     if @next
-      refs = if @replicate then @refs.dup() else @refs
+      refs = refs.dup() if @replicate
       @next.proceed(refs)
-    @proceed(@refs) if @replicate
-    @refs.get(@name_id)
+    @proceed(refs) if @replicate
+    refs.get(@name_id)
 
 # Internal: Abstract parent class for Parallel and Choice processes.
 class PIPL.ComplexProcess
-  constructor: (@engine) ->
+  constructor: (@engine, @new_names) ->
     @processes = []
 
   # Public: Create a new sequence of processes starting with a read.
-  read: (channel_id, name_id, replicate=false) ->
-    p = @make_read(channel_id, name_id, replicate)
+  read: (channel_id, name_id, replicate=false, new_names) ->
+    p = @make_read(channel_id, name_id, replicate, new_names)
     @processes.push(p)
     p
 
   # Public: Create a new sequence of processes starting with a send.
-  send: (channel_id, name_id, replicate=false) ->
-    p = @make_send(channel_id, name_id, replicate)
+  send: (channel_id, name_id, replicate=false, new_names) ->
+    p = @make_send(channel_id, name_id, replicate, new_names)
     @processes.push(p)
     p
 
 class PIPL.ParallelProcess extends PIPL.ComplexProcess
-  make_read: (channel_id, name_id, replicate) ->
-    new PIPL.ReadProcess(@engine, channel_id, name_id, replicate)
+  make_read: (channel_id, name_id, replicate, new_names) ->
+    new PIPL.ReadProcess(@engine, channel_id, name_id, replicate, new_names)
 
-  make_send: (channel_id, name_id, replicate) ->
-    new PIPL.SendProcess(@engine, channel_id, name_id, replicate)
+  make_send: (channel_id, name_id, replicate, new_names) ->
+    new PIPL.SendProcess(@engine, channel_id, name_id, replicate, new_names)
 
   proceed: (refs) ->
+    @engine.make_new_names(refs, @new_names)
     if @processes.length > 0
       @processes[0].proceed(refs)
       @processes[i].proceed(refs.dup()) for i in [1..(@processes.length-1)]
 
 class PIPL.ChoiceProcess extends PIPL.ComplexProcess
-  make_read: (channel_id, name_id, replicate) ->
-    new PIPL.ChoiceReadProcess(@engine, this, channel_id, name_id, replicate)
+  make_read: (channel_id, name_id, replicate, new_names) ->
+    new PIPL.ChoiceReadProcess(@engine, this, channel_id, name_id, replicate, new_names)
 
-  make_send: (channel_id, name_id, replicate) ->
-    new PIPL.ChoiceSendProcess(@engine, this, channel_id, name_id, replicate)
+  make_send: (channel_id, name_id, replicate, new_names) ->
+    new PIPL.ChoiceSendProcess(@engine, this, channel_id, name_id, replicate, new_names)
 
   proceed: (refs) ->
-    @process.forEach (p) -> p.proceed(refs)
+    @engine.make_new_names(refs, @new_names)
+    @processes.forEach (p) -> p.proceed(refs)
 
-  notify: ->
-    @process.forEach (p) -> p.kill()
+  notify: (refs) ->
+    @processes.forEach (p) -> p.kill(refs)
 
 class PIPL.ChoiceReadProcess extends PIPL.ReadProcess
-  contructor: (@engine, @parent, @channel_id, @name_id, @replicate) ->
+  constructor: (@engine, @parent, @channel_id, @name_id, @replicate, @new_names) ->
 
-  kill: ->
-    @engine.dequeue_reader(@refs.get(@channel_id), this)
+  kill: (refs) ->
+    @engine.dequeue_reader(refs.get(@channel_id), this)
 
-  read: ->
-    @parent.notify
-    super(value)
+  input: (refs, value) ->
+    @parent.notify(refs)
+    super(refs, value)
 
 class PIPL.ChoiceSendProcess extends PIPL.SendProcess
-  contructor: (@engine, @parent, @channel_id, @name_id, @replicate) ->
+  constructor: (@engine, @parent, @channel_id, @name_id, @replicate, @new_names) ->
 
-  kill: ->
-    @engine.dequeue_sender(@refs.get(@channel_id), this)
+  kill: (refs) ->
+    @engine.dequeue_sender(refs.get(@channel_id), this)
 
-  send: ->
-    @parent.notify
-    super(value)
+  output: (refs) ->
+    @parent.notify(refs)
+    super(refs)
