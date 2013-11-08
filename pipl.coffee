@@ -56,7 +56,7 @@ add_math_functions = (pipl) ->
 Template.form.events =
   'click #run': run
   'keypress #subject': (event) ->
-    if event.ctrlKey && event.keyCode == 10
+    if event.ctrlKey && (event.keyCode == 10 || event.keyCode == 13)
       run()
 
 Template.examples.events =
