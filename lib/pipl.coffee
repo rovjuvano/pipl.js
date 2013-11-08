@@ -49,6 +49,12 @@ class PIPL.Engine
     @queue = []
     @readers = {}
     @senders = {}
+    @_run_loop ||= =>
+      nice = 100
+      while @queue.length > 0 && nice > 0
+        @step()
+        nice--
+      @run()
 
   __id: 0
   new_id: ->
@@ -93,9 +99,8 @@ class PIPL.Engine
 
   # Public: Run to completion.
   run: ->
-    @step()
     if @queue.length > 0
-      setTimeout((=> @run()), 10)
+      setTimeout(@_run_loop, 10)
     else
       @clean()
 
