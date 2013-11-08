@@ -6,13 +6,52 @@ run = ->
   try
     ast = PIPL_Parser.parse(code)
     pipl = new Pipl() if (!pipl || $('#reset').is(':checked'))
+    add_print(pipl)
+    add_math_functions(pipl)
     window.last_pipl = pipl
     ast.enter(pipl)
+    $('#result').removeClass('error').empty()
     pipl.run()
-    $('#result').removeClass('error').text(ast.toString())
   catch e
     msg = "Line #{e.line}, column #{e.column}: #{e.message}"
     $('#result').addClass('error').text(msg)
+
+add_print = (pipl) ->
+  pipl
+    .read('print', ['0'..'9'], true)
+    .call((refs) ->
+      text = (refs.get(i) for i in ['0'..'9']).join(' ');
+      $('#result').append($('<li></li>').text(text))
+    )
+
+add_math_functions = (pipl) ->
+  _add_4 = (n, f) ->
+    pipl
+      .read(n, ['a', 'b', 'out'], true)
+      .call((refs) ->
+        result = f(+refs.get('a'), +refs.get('b'))
+        refs.set('__', result)
+      )
+      .send('out', '__')
+
+  _add_4 '+', (a, b) -> a + b
+  _add_4 '-', (a, b) -> a - b
+  _add_4 '*', (a, b) -> a * b
+  _add_4 '/', (a, b) -> a / b
+
+  _add_cmp = (n, f) ->
+    pipl
+      .read(n, ['a', 'b', 'true', 'false'], true)
+      .call((refs) ->
+        result = f(+refs.get('a'), +refs.get('b'))
+        refs.set('__', refs.get(result))
+      )
+      .send('__', '')
+
+  _add_cmp '>', (a, b) -> a > b
+  _add_cmp '<', (a, b) -> a < b
+  _add_cmp '>=', (a, b) -> a >= b
+  _add_cmp '<=', (a, b) -> a <= b
 
 Template.form.events =
   'click #run': run
@@ -51,12 +90,12 @@ Template.examples.examples = [
   {
     title: 'Replication'
     code: [
-      '! print[s] . ()',
-      'print(1) . ()',
-      'print(2) . ()',
-      'print(3) . ()',
-      'print(4) . ()',
-      'print(5) . ()',
+      '! call[s] . print(s) . ()',
+      'call(1) . ()',
+      'call(2) . ()',
+      'call(3) . ()',
+      'call(4) . ()',
+      'call(5) . ()',
     ].join("\n")
   },
   { 
@@ -73,7 +112,6 @@ Template.examples.examples = [
       '  true_block(t) . ()',
       '  false_block(f) . ()',
       ')',
-      '! print[s] . ()',
     ].join("\n")
   },
   {
@@ -81,7 +119,6 @@ Template.examples.examples = [
     code: [
       'c(won, too, three) . ()',
       'c[a b c] . print(a) . print(b) . print(c) . ()',
-      '! print[s] . ()',
     ].join("\n")
   },
   {
@@ -105,7 +142,51 @@ Template.examples.examples = [
       'case-b(never-read) . ()',
       'y(never-read) . ()',
       'z(z) . () ',
-      '! print[s] . ()',
+    ].join("\n")
+  },
+  {
+    title: 'Arithmetic v1',
+    code: [
+      '+(6, 2, out) . out[r] . print(6 + 2 = r) .',
+      '-(6, 2, out) . out[r] . print(6 - 2 = r) .',
+      '*(6, 2, out) . out[r] . print(6 * 2 = r) .',
+      '/(6, 2, out) . out[r] . print(6 / 2 = r) .',
+      '()',
+    ].join("\n")
+  },
+  {
+    title: 'Arithmetic v2',
+    code: [
+      '! f[a op b] . [p] op(a, b, p) . p[r] . print(a op b = r) . s() . ()',
+      'f(6 + 2) . s[] .',
+      'f(6 - 2) . s[] .',
+      'f(6 * 2) . s[] .',
+      'f(6 / 2) . s[] .',
+      '()',
+    ].join("\n")
+  },
+  {
+    title: 'Numeric Comparison'
+    code: [
+      '! cmp[a, op, b] .',
+      '(|',
+      '  [t f] op(a, b, t, f) .',
+      '  (+',
+      '    t[].p(true) . ()',
+      '    f[].p(false) . ()',
+      '  )',
+      '  p[r] . print(a op b = r) . s() . ()',
+      ')',
+      'cmp(6 < 2) . s[] .',
+      'cmp(6 > 2) . s[] .',
+      'cmp(6 <= 2) . s[] .',
+      'cmp(6 >= 2) . s[] .',
+      'print(-- equal --) .',
+      'cmp(2 < 2) . s[] .',
+      'cmp(2 > 2) . s[] .',
+      'cmp(2 <= 2) . s[] .',
+      'cmp(2 >= 2) . s[] .',
+      '()',
     ].join("\n")
   },
   {
@@ -114,33 +195,20 @@ Template.examples.examples = [
       '! ![n, factorial-out] .',
       '[greater-than-two, two-or-less]',
       '(|',
-      '  greater-than(n, 2, greater-than-two, two-or-less) .',
+      '  >(n, 2, greater-than-two, two-or-less) .',
       '  (+',
       '    two-or-less[] . factorial-out(n) . ()',
       '    greater-than-two[] .',
       '    [t1 t2 t3]',
       '    (|',
-      '      subtract(n, 1, t1) . ()',
+      '      -(n, 1, t1) . ()',
       '      t1[n-1] . !(n-1, t2) . ()',
-      '      t2[factorial-n-1] . multiply(n, factorial-n-1, t3) . ()',
+      '      t2[factorial-n-1] . *(n, factorial-n-1, t3) . ()',
       '      t3[res] . factorial-out(res) . ()',
       '    )',
       '  )',
-      '  print(n).()',
       ')',
-      '!(4, is-24) . ()',
-      'greater-than[a, b, greater, not-greater].greater()',
-      '. greater-than[a, b, greater, not-greater].greater()',
-      '. greater-than[a, b, greater, not-greater].not-greater()',
-      '. ()',
-      'subtract[n, 1, subtract-out].subtract-out(3)',
-      '. subtract[n, 1, subtract-out].subtract-out(2)',
-      '. ()',
-      'multiply[a, b, multiply-out].multiply-out(6)',
-      '. multiply[a, b, multiply-out].multiply-out(24)',
-      '. ()',
-      'is-24[result] . print(result) . ()',
-      '! print[s] . ()',
+      '!(4, print) . ()',
     ].join("\n")
   },
   {
@@ -156,7 +224,7 @@ Template.examples.examples = [
       '    set[value] . store(name, value) . ()',
       '  )',
       ')',
-      'create(x, 2, out) . out[get, set] .',
+      '[out]create(x, 2, out) . out[get, set] .',
       '(|',
       '  get(print) . set(7) . get(print) . t1() . ()',
       '  t1[] . get(print) . set(sub1) . get(print) . t2() . ()',
@@ -164,7 +232,6 @@ Template.examples.examples = [
       '  t3[] . get(print) . set(sub2) . get(print) . ()',
       ')',
       'send[setter, next] . setter(outside) . next() . ()',
-      '! print[s] . ()',
     ].join("\n")
   },
   {

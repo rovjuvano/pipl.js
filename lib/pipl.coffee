@@ -139,6 +139,10 @@ class PIPL.SimpleProcess
   send: (channel_id, name_ids, replicate=false, new_names) ->
     @next = make_step(@engine, PIPL.SendProcess, channel_id, name_ids, replicate, new_names, this)
 
+  # Public: Append function
+  call: (callback, args...) ->
+    @next = new PIPL.CallProcess(@engine, callback, args)
+
   # Public: Append parallel process.
   parallel: (new_names) ->
     @next = new PIPL.ParallelProcess(@engine, new_names)
@@ -153,7 +157,6 @@ class PIPL.ReadProcess extends PIPL.SimpleProcess
 
   input: (refs, values) ->
     @engine.make_new_names(refs, @new_names)
-    console.log("read: #{@channel_id}=#{refs.get(@channel_id)}[" + ("#{name_id} = #{values[i]}" for name_id, i in @name_ids).join(', ') + "]")
     if @next
       refs = refs.dup() if @replicate
       refs.set(name_id, values[i]) for name_id, i in @name_ids
@@ -166,12 +169,17 @@ class PIPL.SendProcess extends PIPL.SimpleProcess
 
   output: (refs) ->
     @engine.make_new_names(refs, @new_names)
-    console.log("send: #{@channel_id}=#{refs.get(@channel_id)}(" + ("#{name_id}=#{refs.get(name_id)}" for name_id in @name_ids).join(', ') + ')')
     if @next
       refs = refs.dup() if @replicate
       @next.proceed(refs)
     @proceed(refs) if @replicate
     (refs.get(name_id) for name_id in @name_ids)
+
+class PIPL.CallProcess extends PIPL.SimpleProcess
+  constructor: (@engine, @callback, @args) ->
+  proceed: (refs) ->
+    @callback.call(@, refs, @args)
+    @next.proceed(refs) if @next
 
 # Internal: Abstract parent class for Parallel and Choice processes.
 class PIPL.ComplexProcess
