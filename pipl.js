@@ -1,83 +1,104 @@
-return unless Meteor.isClient
-Handlebars.registerHelper('log', (msg)-> console.log(msg))
-pipl = null
-run = ->
-  code = $('#subject').val()
-  try
-    ast = PIPL_Parser.parse(code)
-    pipl = new Pipl() if (!pipl || $('#reset').is(':checked'))
-    add_print(pipl)
-    add_math_functions(pipl)
-    window.last_pipl = pipl
-    ast.enter(pipl)
-    $('#result').removeClass('error').empty()
-    pipl.run()
-  catch e
-    msg = "Line #{e.line}, column #{e.column}: #{e.message}"
-    $('#result').addClass('error').text(msg)
+if (!Meteor.isClient) {
+  return;
+}
 
-add_print = (pipl) ->
+Handlebars.registerHelper('log', function(msg) {
+  console.log(msg);
+});
+
+var getPipl = function() {
+    if (!window.last_pipl || $('#reset').is(':checked')) {
+      var pipl = new Pipl();
+      add_print(pipl);
+      add_math_functions(pipl);
+      window.last_pipl = pipl;
+    }
+    return window.last_pipl;
+}
+var run = function() {
+  var code = $('#subject').val();
+  try {
+    var ast = PIPL_Parser.parse(code);
+    var pipl = getPipl();
+    ast.enter(pipl);
+    $('#result').removeClass('error').empty();
+    pipl.run();
+  } catch (e) {
+    msg = "Line " + e.line + ", column " + e.column + ": " + e.message;
+    $('#result').addClass('error').text(msg);
+  }
+};
+
+var add_print = function(pipl) {
+  var REFS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
   pipl
-    .read('print', ['0'..'9'], true)
-    .call((refs) ->
-      text = (refs.get(i) for i in ['0'..'9']).join(' ');
-      $('#result').append($('<li></li>').text(text))
-    )
+    .read('print', REFS, true)
+    .call(function(refs) {
+      var text = REFS.map(function(ref) { return refs.get(ref) }).join(' ');
+      $('#result').append($('<li></li>').text(text));
+  });
+};
 
-add_math_functions = (pipl) ->
-  _add_4 = (n, f) ->
+add_math_functions = function(pipl) {
+  var _add_4 = function(n, f) {
     pipl
       .read(n, ['a', 'b', 'out'], true)
-      .call((refs) ->
-        result = f(+refs.get('a'), +refs.get('b'))
-        refs.set('__', result)
-      )
-      .send('out', '__')
+      .call(function(refs) {
+        var result = f(+refs.get('a'), +refs.get('b'));
+        refs.set('__', result);
+      })
+      .send('out', '__');
+  };
+  _add_4('+', function(a, b) { return a + b; });
+  _add_4('-', function(a, b) { return a - b; });
+  _add_4('*', function(a, b) { return a * b; });
+  _add_4('/', function(a, b) { return a / b; });
 
-  _add_4 '+', (a, b) -> a + b
-  _add_4 '-', (a, b) -> a - b
-  _add_4 '*', (a, b) -> a * b
-  _add_4 '/', (a, b) -> a / b
-
-  _add_cmp = (n, f) ->
-    pipl
+  var _add_cmp = function(n, f) {
+    return pipl
       .read(n, ['a', 'b', 'true', 'false'], true)
-      .call((refs) ->
-        result = f(+refs.get('a'), +refs.get('b'))
-        refs.set('__', refs.get(result))
-      )
-      .send('__', '')
+      .call(function(refs) {
+        var result = f(+refs.get('a'), +refs.get('b'));
+        refs.set('__', refs.get(result));
+      })
+      .send('__', '');
+  };
+  _add_cmp('>', function(a, b) { return a > b; });
+  _add_cmp('<', function(a, b) { return a < b; });
+  _add_cmp('>=', function(a, b) { return a >= b; });
+  _add_cmp('<=', function(a, b) { return a <= b; });
+};
 
-  _add_cmp '>', (a, b) -> a > b
-  _add_cmp '<', (a, b) -> a < b
-  _add_cmp '>=', (a, b) -> a >= b
-  _add_cmp '<=', (a, b) -> a <= b
+Template.form.events = {
+  'click #run': run,
+  'keypress #subject': function(event) {
+    if (event.ctrlKey && (event.keyCode === 10 || event.keyCode === 13)) {
+      run();
+    }
+  }
+};
 
-Template.form.events =
-  'click #run': run
-  'keypress #subject': (event) ->
-    if event.ctrlKey && (event.keyCode == 10 || event.keyCode == 13)
-      run()
-
-Template.examples.events =
-  'change #examples': (event) ->
-    $('#subject').val( event.target.value )
-    $('#examples').val('**')
+Template.examples.events = {
+  'change #examples': function(event) {
+    $('#subject').val(event.target.value);
+    $('#examples').val('**');
+  }
+};
 
 Template.examples.examples = [
   {
-    title: '** clear **'
+    title: '** clear **',
     code: ''
   },
   {
-    title: 'Simple'
+    title: 'Simple',
     code: [
       'c1(n1) . n1[n2] . ()',
       'c1[n3] . n3(cowbell) . ()',
     ].join("\n")
   },
   {
-    title: 'Procedure'
+    title: 'Procedure',
     code: [
       's0(begin) . ()',
       's0[a].s1(b) . ()',
@@ -88,7 +109,7 @@ Template.examples.examples = [
     ].join("\n")
   },
   {
-    title: 'Replication'
+    title: 'Replication',
     code: [
       '! call[s] . print(s) . ()',
       'call(1) . ()',
@@ -99,7 +120,7 @@ Template.examples.examples = [
     ].join("\n")
   },
   { 
-    title: 'Choice'
+    title: 'Choice',
     code: [
       'if(when) . if(else) .',
       '(+',
@@ -166,7 +187,7 @@ Template.examples.examples = [
     ].join("\n")
   },
   {
-    title: 'Numeric Comparison'
+    title: 'Numeric Comparison',
     code: [
       '! cmp[a, op, b] .',
       '(|',
@@ -190,7 +211,7 @@ Template.examples.examples = [
     ].join("\n")
   },
   {
-    title: 'Factorial'
+    title: 'Factorial',
     code: [
       '! ![n, factorial-out] .',
       '[greater-than-two, two-or-less]',
@@ -235,7 +256,7 @@ Template.examples.examples = [
     ].join("\n")
   },
   {
-    title: 'logic'
+    title: 'logic',
     code: [
       '! true[true_p, false_p] . true_p(true) . ()',
       '! false[true_p, false_p]  .false_p(false) . ()',
