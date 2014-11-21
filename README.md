@@ -48,8 +48,14 @@ reduces to
     a'[]
     a()
 
+## Compiling Parser
+Use [PEG.js](http://pegjs.majda.cz/).
+
+    npm install -g pegjs
+    pegjs -e PIPL_Parser lib/pipl.pegjs lib/pipl.pegjs.js
+
 #### LICENSE AND COPYRIGHT
 
-Copyright (C) 2013 Robert Juliano
+Copyright (C) 2013-2014 Robert Juliano
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
