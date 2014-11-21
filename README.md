@@ -1,6 +1,6 @@
 # PIPL - Pi-Calculus Programming Library - prototype demo
 
-The demo is a [meteor](http://www.meteor.com/) app (~ 0.6.6.3).
+The demo is a [meteor](http://www.meteor.com/) app (1.0).
 
 Demo may be available at [pipl-demo.meteor.com](http://pipl-demo.meteor.com/).
 
